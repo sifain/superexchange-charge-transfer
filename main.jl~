@@ -1,0 +1,385 @@
+#!/usr/bin/env julia
+
+#Pkg.add("Distributions")
+#using Distributions
+#test=Normal(0,10)
+#x=rand(test,100)
+#println(x)
+#exit()
+
+include("constants.jl")
+
+function esys(x::Float64,hsys::Array{Float64,2},eval::Array{Float64,1},evec::Array{Float64,2})
+    hsys[1,1]=(0.5*mass*omega^(2.0))*x^(2.0)+subotnik*x
+    hsys[2,2]=(0.5*mass*omega^(2.0))*(x+df/(2.0*subotnik))^(2.0)+te
+    hsys[3,3]=(0.5*mass*omega^(2.0))*x^(2.0)-subotnik*x-df
+    hsys[1,2]=hsys[2,1]=is12
+    hsys[1,3]=hsys[3,1]=0.00
+    hsys[2,3]=hsys[3,2]=is23
+    eval[:],evec[:,:]=eig(hsys)
+    index=sortperm(eval)
+    eval[:]=eval[index]
+    evec[:,:]=evec[:,index]
+    nothing    
+end
+
+function force(x::Float64,fsys::Array{Float64,2},bra::Array{Float64,1},ket::Array{Float64,1},f::Array{Float64,1})
+    fsys[1,1]=(mass*omega^(2.0))*x+subotnik
+    fsys[2,2]=(mass*omega^(2.0))*(x+df/2.0*subotnik)
+    fsys[3,3]=(mass*omega^(2.0))*x-subotnik
+    fsys[1,2]=fsys[2,1]=0.0
+    fsys[1,3]=fsys[3,1]=0.0
+    fsys[2,3]=fsys[3,2]=0.0
+    f[1]=-dot(bra,fsys*ket)
+    nothing
+end
+
+function classical(xv::Array{Float64,1},xvc::Array{Float64,1},cstate::Int64,hsys::Array{Float64,2},eval::Array{Float64,1},evec::Array{Float64,2},fsys::Array{Float64,2},f::Array{Float64,1},dx::Array{Float64,1},dv::Array{Float64,1})
+    ### start integration ###
+    xvc[1]=xv[1]
+    xvc[2]=xv[2]
+    ## rk4:1 ##
+    esys(xv[1],hsys,eval,evec)
+    force(xv[1],fsys,evec[:,cstate],evec[:,cstate],f)
+    dv[1]=(dt/mass)*(f[1]-mass*friction*xv[2])
+    dx[1]=dt*xv[2]
+    xv[1]=xvc[1]+dx[1]/2.0
+    xv[2]=xvc[2]+dv[1]/2.0
+    ## rk4:2 ##
+    esys(xv[1],hsys,eval,evec)
+    force(xv[1],fsys,evec[:,cstate],evec[:,cstate],f)
+    dv[2]=(dt/mass)*(f[1]-mass*friction*xv[2])
+    dx[2]=dt*xv[2]
+    xv[1]=xvc[1]+dx[2]/2.0
+    xv[2]=xvc[2]+dv[2]/2.0
+    ## rk4:3 ##
+    esys(xv[1],hsys,eval,evec)
+    force(xv[1],fsys,evec[:,cstate],evec[:,cstate],f)
+    dv[3]=(dt/mass)*(f[1]-mass*friction*xv[2])
+    dx[3]=dt*xv[2]
+    xv[1]=xvc[1]+dx[3]
+    xv[2]=xvc[2]+dv[3]
+    ## rk4:4 ##
+    esys(xv[1],hsys,eval,evec)
+    force(xv[1],fsys,evec[:,cstate],evec[:,cstate],f)
+    dv[4]=(dt/mass)*(f[1]-mass*friction*xv[2])
+    dx[4]=dt*xv[2]
+    ### end integration ###
+    xv[1]=xvc[1]+(dx[1]+2.0*(dx[2]+dx[3])+dx[4])/6.0
+    xv[2]=xvc[2]+(dv[1]+2.0*(dv[2]+dv[3])+dv[4])/6.0
+    nothing
+end
+
+function thermostat(xv::Array{Float64,1},cstate::Int64,hsys::Array{Float64,2},eval::Array{Float64,1},evec::Array{Float64,2},fsys::Array{Float64,2},f::Array{Float64,1},r::Array{Float64,1},z::Array{Float64,1},t::Array{Float64,1},hessian::Float64)
+    ### incorporate bath ###
+    #r[:]=randn(4)*langevin_sigma
+    r[:] = [langevin_sigma,-langevin_sigma,langevin_sigma,-langevin_sigma] # debugging only
+    #r[:]=[0,0,0,0] # debugging only
+    z[1]=r[1]
+    z[2]=dt*(r[1]/2.0+r[2]/(2.0*sqrt(3.0)))
+    z[3]=dt^(2.0)*(r[1]/6.0+(sqrt(3.0)/12.0)*r[2]+r[3]/(12.0*sqrt(5.0)))
+    z[4]=dt^(3.0)*(r[1]/24.0+(sqrt(3.0)/40.0)*r[2]+r[3]/(24.0*sqrt(5.0))+r[4]/(120.0*sqrt(7.0)))
+    esys(xv[1]+2.0*dx_num_deriv,hsys,eval,evec)
+    force(xv[1]+2.0*dx_num_deriv,fsys,evec[:,cstate],evec[:,cstate],f)
+    t[1]=-f[1]
+    esys(xv[1]+dx_num_deriv,hsys,eval,evec)
+    force(xv[1]+dx_num_deriv,fsys,evec[:,cstate],evec[:,cstate],f)
+    t[2]=8.0*f[1]
+    esys(xv[1]-dx_num_deriv,hsys,eval,evec)
+    force(xv[1]-dx_num_deriv,fsys,evec[:,cstate],evec[:,cstate],f)
+    t[3]=-8.0*f[1]
+    esys(xv[1]-3.0*dx_num_deriv,hsys,eval,evec)
+    force(xv[1]-2.0*dx_num_deriv,fsys,evec[:,cstate],evec[:,cstate],f)
+    t[4]=f[1]
+    hessian=-(t[1]+t[2]+t[3]+t[4])/(12.0*dx_num_deriv)
+    ### position and velocity ###
+    xv[1]=xv[1]+z[2]-friction*z[3]+(-hessian/mass+friction^(2.0))*z[4]
+    xv[2]=xv[2]+z[1]-friction*z[2]+(-hessian/mass+friction^(2.0))*z[3]+(2.0*friction*hessian/mass-friction^(3.0))*z[4]
+    nothing
+end
+
+function norm(evecc::Array{Float64,2},evecn::Array{Float64,2})
+    for i=1:nstates
+        if sign(dot(evecc[:,i],evecn[:,i]))==-1.0
+            evecn[:,i]=-evecn[:,i]
+        end
+    end
+    nothing
+end
+
+function nac(d::Array{Float64,2},nf::Array{Float64,2},df::Array{Float64,2},x::Float64,cstate::Int64,evec::Array{Float64,2},eval::Array{Float64,1},fsys::Array{Float64,2},f::Array{Float64,1})
+    ### nac and forces ###
+    for i=1:nstates
+        for j=1:i
+            force(x,fsys,evec[:,i],evec[:,j],f)
+            nf[i,j]=f[1]
+            if i!=j
+                d[i,j]=-nf[i,j]/(eval[j]-eval[i])
+            end
+        end
+    end
+    ### nac properties ###
+    d[1,1]=d[2,2]=d[3,3]=0.0
+    d[1,2]=-d[2,1]
+    d[1,3]=-d[3,1]
+    d[2,3]=-d[3,2]
+    ### force properties ###
+    nf[1,2]=nf[2,1]
+    nf[1,3]=nf[3,1]
+    nf[2,3]=nf[3,2]
+    df[:,:]=nf-nf[cstate,cstate]*eye(nstates)
+    nothing
+end
+
+function moment(xm::Array{Complex{Float64},2},pm::Array{Complex{Float64},2},v::Float64,cstate::Int64,d::Array{Float64,2},hd::Array{Float64,2},df::Array{Float64,2},dmat::Array{Complex{Float64},2})
+    #xm[:,:]=-1.0im*dt*(hd*xm-xm*hd+pm/mass-v*(d*xm-xm*d))
+    #pm[:,:]=-1.0im*dt*(hd*pm-pm*hd+(df*dmat+dmat*df)/2.0-v*(d*pm-pm*d))
+    #xm[:,:]=xm-xm[cstate,cstate]*eye(nstates)
+    #pm[:,:]=pm-pm[cstate,cstate]*eye(nstates)
+    xm[:,:]=-1.0im*(hd*xm-xm*hd)+pm/mass-v*(d*xm-xm*d)
+    pm[:,:]=-1.0im*(hd*pm-pm*hd)+(df*dmat+dmat*df)/2.0-v*(d*pm-pm*d)
+    xm[:,:]=dt*(xm-xm[cstate,cstate]*eye(nstates))
+    pm[:,:]=dt*(pm-pm[cstate,cstate]*eye(nstates))
+    nothing
+end
+
+function moments(xm::Array{Complex{Float64},2},pm::Array{Complex{Float64},2},xmc::Array{Complex{Float64},2},pmc::Array{Complex{Float64},2},v::Float64,cstate::Int64,d::Array{Float64,2},hd::Array{Float64,2},df::Array{Float64,2},dmat::Array{Complex{Float64},2},ddp1::Array{Complex{Float64},2},ddp2::Array{Complex{Float64},2},ddp3::Array{Complex{Float64},2},ddp4::Array{Complex{Float64},2},ddx1::Array{Complex{Float64},2},ddx2::Array{Complex{Float64},2},ddx3::Array{Complex{Float64},2},ddx4::Array{Complex{Float64},2})
+    ### start integration ###
+    xmc[:,:]=xm
+    pmc[:,:]=pm
+    ## rk4:1 ##
+    moment(xm,pm,v,cstate,d,hd,df,dmat)
+    ddp1[:,:]=pm
+    ddx1[:,:]=xm
+    xm[:,:]=xmc+ddx1/2.0
+    pm[:,:]=pmc+ddp1/2.0
+    ## rk4:2 ##
+    moment(xm,pm,v,cstate,d,hd,df,dmat)
+    ddp2[:,:]=pm
+    ddx2[:,:]=xm
+    xm[:,:]=xmc+ddx2/2.0
+    pm[:,:]=pmc+ddp2/2.0
+    ## rk4:3 ##
+    moment(xm,pm,v,cstate,d,hd,df,dmat)
+    ddp3[:,:]=pm
+    ddx3[:,:]=xm
+    xm[:,:]=xmc+ddx3
+    pm[:,:]=pmc+ddp3
+    ## rk4:4 ##
+    moment(xm,pm,v,cstate,d,hd,df,dmat)
+    ddp4[:,:]=pm
+    ddx4[:,:]=xm
+    ### end integration ###
+    xm[:,:]=xmc+(ddx1+2.0*(ddx2+ddx3)+ddx4)/6.0
+    pm[:,:]=pmc+(ddp1+2.0*(ddp2+ddp3)+ddp4)/6.0
+    nothing
+end
+
+function quantum(c::Array{Complex{Float64},1},h::Array{Complex{Float64},2},dc1::Array{Complex{Float64},1},dc2::Array{Complex{Float64},1},dc3::Array{Complex{Float64},1},dc4::Array{Complex{Float64},1})
+    dc1[:]=-1.0im*dt*h*c
+    dc2[:]=-1.0im*dt*h*(c+dc1/2.0)
+    dc3[:]=-1.0im*dt*h*(c+dc2/2.0)
+    dc4[:]=-1.0im*dt*h*(c+dc3)
+    c[:]=c+(dc1+2.0*(dc2+dc3)+dc4)/6.0
+    nothing
+end
+
+function gfsh(xv::Array{Float64,1},cnstate::Array{Int64,1},deltap::Array{Float64,1},pafter::Float64,positives::Array{Float64,1},hopping::Array{Float64,1},index::Int64,eval::Array{Float64,1},xm::Array{Complex{Float64},2},pm::Array{Complex{Float64},2})
+    if deltap[cnstate[1]]>0.0
+        cnstate[2]=cnstate[1]
+    else
+        positives[:]=deltap
+        positives[positives.<0.0]=0.0
+        hopping[:]=cumsum(-deltap[cnstate[1]]*positives/(pafter*sum(positives)))
+        hopping[isnan(hopping)]=0.0
+        #index=searchsortedfirst(hopping,rand())
+        index=searchsortedfirst(hopping,0.9) # debugging only
+        if index==nstates+1
+            cnstate[2]=cnstate[1]
+        else
+            cnstate[2]=states[index]
+            if mass*abs2(xv[2])/2.0+eval[cnstate[1]]<eval[cnstate[2]]
+                cnstate[2]=cnstate[1]
+                xv[2]=-xv[2]
+            else
+                xv[2]=sign(xv[2])*sqrt(abs2(xv[2])-(2.0/mass)*(eval[cnstate[2]]-eval[cnstate[1]]))
+                xm[:,:]=0.0
+                pm[:,:]=0.0
+            end
+        end
+    end
+    nothing
+end
+
+function decohere(cstate::Int64,c::Array{Complex{Float64},1},pstates::Array{Int64,1},rates::Array{Float64,1},rd::Float64,nf::Array{Float64,2},df::Array{Float64,2},xm::Array{Complex{Float64},2},pm::Array{Complex{Float64},2})
+    pstates[:]=states[states.!=cstate]
+    for pstate in pstates
+        rates[1]=real(-(dt/2.0)*df[pstate,pstate]*xm[pstate,pstate])
+        rates[2]=real(-rates[1]-(2.0*dt)*abs(nf[cstate,pstate]*xm[pstate,pstate]))
+        rd=rand()
+        if rd<rates[2]
+            c[:]=c/sqrt(1.0-abs2(c[pstate]))
+            c[pstate]=0.0
+            xm[pstate,:]=xm[:,pstate]=0.0
+            pm[pstate,:]=pm[:,pstate]=0.0
+        else
+            if rd<rates[1]
+                xm[pstate,:]=xm[:,pstate]=0.0
+                pm[pstate,:]=pm[:,pstate]=0.0
+            end
+        end
+    end
+    nothing
+end
+
+function decohere_simple_collapse_on_successful_hop(cnstate::Array{Int64,1},c::Array{Complex{Float64},1})
+    if cnstate[1] != cnstate[2]
+        c[:]=zeros(
+        pstates[:]=states[states.!=cnstate[2]]
+        
+    # all that is required here is to check whether states
+    # have changed and to collapse to the current state of the system
+    # inputs include cstate, nstate, and coefficients
+    # only changed outputs are the coefficients
+end
+    
+function decohere_simple_collapse_on_attempted_hop()
+    # all that is required here is to check whether states
+    # have changed and to collapse if surface hopping has
+    # attempted for a hop to occur, this will require adding
+    # a variable that turns on or off 0 or 1 whether hop was
+    # attempted or not, in the gfsh function
+    
+end
+
+function main()
+    
+    ### allocate memory ###
+    xv=Array(Float64,2)
+    xvc=Array(Float64,2)
+    hsys=Array(Float64,(nstates,nstates))
+    eval=Array(Float64,nstates)
+    evec=Array(Float64,(nstates,nstates))
+    fsys=Array(Float64,(nstates,nstates))
+    f=Array(Float64,1)
+    dx=Array(Float64,4)
+    dv=Array(Float64,4)
+    r=Array(Float64,4)
+    z=Array(Float64,4)
+    t=Array(Float64,4)
+    hessian::Float64 = 0.0
+    evecc=Array(Float64,(nstates,nstates))
+    evecn=Array(Float64,(nstates,nstates))
+    d=Array(Float64,(nstates,nstates))
+    nf=Array(Float64,(nstates,nstates))
+    df=Array(Float64,(nstates,nstates))
+    xm=Array(Complex{Float64},(nstates,nstates))
+    pm=Array(Complex{Float64},(nstates,nstates))
+    xmc=Array(Complex{Float64},(nstates,nstates))
+    pmc=Array(Complex{Float64},(nstates,nstates))
+    hd=Array(Float64,(nstates,nstates))
+    ddx1=Array(Complex{Float64},(nstates,nstates))
+    ddx2=Array(Complex{Float64},(nstates,nstates))
+    ddx3=Array(Complex{Float64},(nstates,nstates))
+    ddx4=Array(Complex{Float64},(nstates,nstates))
+    ddp1=Array(Complex{Float64},(nstates,nstates))
+    ddp2=Array(Complex{Float64},(nstates,nstates))
+    ddp3=Array(Complex{Float64},(nstates,nstates))
+    ddp4=Array(Complex{Float64},(nstates,nstates))
+    h=Array(Complex{Float64},(nstates,nstates))
+    c=Array(Complex{Float64},nstates)
+    dc1=Array(Complex{Float64},nstates)
+    dc2=Array(Complex{Float64},nstates)
+    dc3=Array(Complex{Float64},nstates)
+    dc4=Array(Complex{Float64},nstates)
+    dmat=Array(Complex{Float64},(nstates,nstates))
+    cnstate=Array(Int64,2)
+    pbefore=Array(Float64,nstates)
+    pafter=Array(Float64,nstates)
+    deltap=Array(Float64,nstates)
+    positives=Array(Float64,nstates)
+    hopping=Array(Float64,nstates)
+    index::Int64 = 0
+    pstates=Array(Int64,nstates-1)
+    rates=Array(Float64,2)
+    rd::Float64 = 0.0
+    diabatp=Array(Float64,nstates)
+    tsindex::Int64 = 1
+    product=Array(Float64,(nstates+1,tots))
+    timestep::Int64 = 0
+    answer=Array(Float64,(nstates+1,anas))
+
+    ### initialize trajectory ###
+    #xv[1]=mean_x+randn()*sigma_x
+    #xv[2]=(mean_p+randn()*sigma_p)/mass
+    xv[1]=mean_x # debugging only
+    xv[2]=mean_p # debugging only
+    
+    esys(xv[1],hsys,eval,evec)
+    evecc[:,:]=evec
+    #cnstate[1]=searchsortedfirst(cumsum(abs2(evecc[1,:])),rand())
+    cnstate[1]=searchsortedfirst(cumsum(abs2(evecc[1,:])),0.5) # debugging only
+    
+    c[:]=evecc[1,:]
+    dmat[:,:]=c*ctranspose(c)
+    pbefore[:]=real(diag(dmat))
+
+    ### begin trajectory ###
+    for timestep=1:tots
+        ### classical dynamics ###
+        classical(xv,xvc,cnstate[1],hsys,eval,evec,fsys,f,dx,dv)
+        # for debugging only
+        #println(xv[1], " ", xv[2]) # debugging only
+        thermostat(xv,cnstate[1],hsys,eval,evec,fsys,f,r,z,t,hessian)
+        evecn[:,:]=evec
+        ### check norm of eigenvectors ###
+        norm(evecc,evecn)
+        evec[:,:]=evecn
+        evecc[:,:]=evecn
+        ### construct nacs and force moments ###
+        nac(d,nf,df,xv[1],cnstate[1],evec,eval,fsys,f)
+        ### construct phase space moments ###
+        hd[:,:]=diagm(eval)
+        moments(xm,pm,xmc,pmc,xv[2],cnstate[1],d,hd,df,dmat,ddp1,ddp2,ddp3,ddp4,ddx1,ddx2,ddx3,ddx4)
+        println(timestep, " ", real(xm[1,2])) # debugging only
+        ### quantum dynamics ###
+        h[:,:]=hd-1.0*im*xv[2]*d
+        quantum(c,h,dc1,dc2,dc3,dc4)
+        ### surface hopping ###
+        dmat[:,:]=c*ctranspose(c)
+        pafter[:]=real(diag(dmat))
+        #println(timestep, " ", sum(pafter)) # debugging only
+        #println(timestep, " ", c) # debugging only
+        if sum(pafter) < .98
+            exit()
+        end
+        deltap[:]=pafter-pbefore
+        deltap[isnan(deltap)]=0.0
+        #println(timestep, " ",deltap) # debugging only
+        gfsh(xv,cnstate,deltap,pafter[cnstate[1]],positives,hopping,index,eval,xm,pm)
+        # debugging only start
+        if cnstate[2]!=cnstate[1]
+            println(cnstate)
+            exit()
+        end
+        # debugging only end
+        pbefore[:]=pafter
+        ### decoherence ###
+        decohere(cnstate[1],c,pstates,rates,rd,nf,df,xm,pm)
+        ### diabatic probabilities ###
+        diabatp[:]=abs2(evec)[:,cnstate[2]]
+        product[1,timestep]=timestep*dt
+        product[2:(nstates+1),timestep]=diabatp
+        ### set current state ###
+        cnstate[1]=cnstate[2]
+        nothing
+    end
+    answer[:,:]=view(product,1:1:(nstates+1),tsindices)
+    #@printf "%.04f" te
+    for i=1:anas
+    	@printf "%.02f %.04f %.04f %.04f\n" answer[1,i] answer[2,i] answer[3,i] answer[4,i]
+    end
+end
+
+main()
+
