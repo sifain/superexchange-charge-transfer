@@ -1,13 +1,9 @@
 #!/usr/bin/env julia
 
 ### timesteps ###
-#const dt=1.25
-const dt=0.1 # debugging only
-# for debugging only
-#const tots=10^(7)
-#const anas=10^(2)
-const tots=10^(5) # debugging only
-const anas=10 # debugging only
+const dt=1.25
+const tots=10^(7)
+const anas=10^(2)
 const tsindices=range(1,convert(Int,tots/anas),anas)
 
 ### states ###
@@ -18,11 +14,11 @@ const states=range(1,nstates)
 const ifactor=1.000
 const mass=1.000
 const omega=4.375*10.0^(-5.0)
-const df=2.400*10.0^(-2.0)
-const te=10.0*10.0^(-2.0) # this needs to be checked
+#const df=2.400*10.0^(-2.0)
+const te=10.0*10.0^(-2.0)
 const re=2.390*10.0^(-2.0)
 const subotnik=sqrt(re*mass*omega^2.0/2.0)
-#const is12=sqrt(2.500*10.0^(-5.0)*te/if) # this needs to be checked
+#const is12=sqrt(2.500*10.0^(-5.0)*te/ifactor) # this needs to be checked
 const is12=sqrt(2.500*10.0^(-6.0))
 const is23=ifactor*is12
 

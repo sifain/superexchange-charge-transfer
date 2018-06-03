@@ -1,12 +1,5 @@
 #!/usr/bin/env julia
 
-#Pkg.add("Distributions")
-#using Distributions
-#test=Normal(0,10)
-#x=rand(test,100)
-#println(x)
-#exit()
-
 include("constants.jl")
 
 function esys(x::Float64,hsys::Array{Float64,2},eval::Array{Float64,1},evec::Array{Float64,2})
@@ -72,9 +65,7 @@ end
 
 function thermostat(xv::Array{Float64,1},cstate::Int64,hsys::Array{Float64,2},eval::Array{Float64,1},evec::Array{Float64,2},fsys::Array{Float64,2},f::Array{Float64,1},r::Array{Float64,1},z::Array{Float64,1},t::Array{Float64,1},hessian::Float64)
     ### incorporate bath ###
-    #r[:]=randn(4)*langevin_sigma
-    r[:] = [langevin_sigma,-langevin_sigma,langevin_sigma,-langevin_sigma] # debugging only
-    #r[:]=[0,0,0,0] # debugging only
+    r[:]=randn(4)*langevin_sigma
     z[1]=r[1]
     z[2]=dt*(r[1]/2.0+r[2]/(2.0*sqrt(3.0)))
     z[3]=dt^(2.0)*(r[1]/6.0+(sqrt(3.0)/12.0)*r[2]+r[3]/(12.0*sqrt(5.0)))
@@ -132,10 +123,6 @@ function nac(d::Array{Float64,2},nf::Array{Float64,2},df::Array{Float64,2},x::Fl
 end
 
 function moment(xm::Array{Complex{Float64},2},pm::Array{Complex{Float64},2},v::Float64,cstate::Int64,d::Array{Float64,2},hd::Array{Float64,2},df::Array{Float64,2},dmat::Array{Complex{Float64},2})
-    #xm[:,:]=-1.0im*dt*(hd*xm-xm*hd+pm/mass-v*(d*xm-xm*d))
-    #pm[:,:]=-1.0im*dt*(hd*pm-pm*hd+(df*dmat+dmat*df)/2.0-v*(d*pm-pm*d))
-    #xm[:,:]=xm-xm[cstate,cstate]*eye(nstates)
-    #pm[:,:]=pm-pm[cstate,cstate]*eye(nstates)
     xm[:,:]=-1.0im*(hd*xm-xm*hd)+pm/mass-v*(d*xm-xm*d)
     pm[:,:]=-1.0im*(hd*pm-pm*hd)+(df*dmat+dmat*df)/2.0-v*(d*pm-pm*d)
     xm[:,:]=dt*(xm-xm[cstate,cstate]*eye(nstates))
@@ -184,25 +171,27 @@ function quantum(c::Array{Complex{Float64},1},h::Array{Complex{Float64},2},dc1::
     nothing
 end
 
-function gfsh(xv::Array{Float64,1},cnstate::Array{Int64,1},deltap::Array{Float64,1},pafter::Float64,positives::Array{Float64,1},hopping::Array{Float64,1},index::Int64,eval::Array{Float64,1},xm::Array{Complex{Float64},2},pm::Array{Complex{Float64},2})
-    if deltap[cnstate[1]]>0.0
-        cnstate[2]=cnstate[1]
+function gfsh(xv::Array{Float64,1},cnastate::Array{Int64,1},deltap::Array{Float64,1},pafter::Float64,positives::Array{Float64,1},hopping::Array{Float64,1},index::Int64,eval::Array{Float64,1},xm::Array{Complex{Float64},2},pm::Array{Complex{Float64},2})
+    if deltap[cnastate[1]]>0.0
+        cnastate[2]=cnastate[1]
+        cnastate[3]=cnastate[1] # this is new
     else
         positives[:]=deltap
         positives[positives.<0.0]=0.0
-        hopping[:]=cumsum(-deltap[cnstate[1]]*positives/(pafter*sum(positives)))
+        hopping[:]=cumsum(-deltap[cnastate[1]]*positives/(pafter*sum(positives)))
         hopping[isnan(hopping)]=0.0
-        #index=searchsortedfirst(hopping,rand())
-        index=searchsortedfirst(hopping,0.9) # debugging only
+        index=searchsortedfirst(hopping,rand())
         if index==nstates+1
-            cnstate[2]=cnstate[1]
+            cnastate[2]=cnastate[1]
+            cnastate[3]=cnastate[1] # this is new
         else
-            cnstate[2]=states[index]
-            if mass*abs2(xv[2])/2.0+eval[cnstate[1]]<eval[cnstate[2]]
-                cnstate[2]=cnstate[1]
+            cnastate[2]=states[index]
+            cnastate[3]=states[index] # this is new
+            if mass*abs2(xv[2])/2.0+eval[cnastate[1]]<eval[cnastate[2]]
+                cnastate[2]=cnastate[1]
                 xv[2]=-xv[2]
             else
-                xv[2]=sign(xv[2])*sqrt(abs2(xv[2])-(2.0/mass)*(eval[cnstate[2]]-eval[cnstate[1]]))
+                xv[2]=sign(xv[2])*sqrt(abs2(xv[2])-(2.0/mass)*(eval[cnastate[2]]-eval[cnastate[1]]))
                 xm[:,:]=0.0
                 pm[:,:]=0.0
             end
@@ -211,7 +200,7 @@ function gfsh(xv::Array{Float64,1},cnstate::Array{Int64,1},deltap::Array{Float64
     nothing
 end
 
-function decohere(cstate::Int64,c::Array{Complex{Float64},1},pstates::Array{Int64,1},rates::Array{Float64,1},rd::Float64,nf::Array{Float64,2},df::Array{Float64,2},xm::Array{Complex{Float64},2},pm::Array{Complex{Float64},2})
+function decohere_augmented_algorithm(cstate::Int64,c::Array{Complex{Float64},1},pstates::Array{Int64,1},rates::Array{Float64,1},rd::Float64,nf::Array{Float64,2},df::Array{Float64,2},xm::Array{Complex{Float64},2},pm::Array{Complex{Float64},2})
     pstates[:]=states[states.!=cstate]
     for pstate in pstates
         rates[1]=real(-(dt/2.0)*df[pstate,pstate]*xm[pstate,pstate])
@@ -232,24 +221,20 @@ function decohere(cstate::Int64,c::Array{Complex{Float64},1},pstates::Array{Int6
     nothing
 end
 
-function decohere_simple_collapse_on_successful_hop(cnstate::Array{Int64,1},c::Array{Complex{Float64},1})
-    if cnstate[1] != cnstate[2]
-        c[:]=zeros(
-        pstates[:]=states[states.!=cnstate[2]]
-        
-    # all that is required here is to check whether states
-    # have changed and to collapse to the current state of the system
-    # inputs include cstate, nstate, and coefficients
-    # only changed outputs are the coefficients
+function decohere_simple_collapse_on_successful_hop(cnastate::Array{Int64,1},c::Array{Complex{Float64},1})
+    if cnastate[2]!=cnastate[1]
+        c[:]=zeros(nstates)
+        c[cnastate[2]]=1.0
+    end
+    nothing
 end
     
-function decohere_simple_collapse_on_attempted_hop()
-    # all that is required here is to check whether states
-    # have changed and to collapse if surface hopping has
-    # attempted for a hop to occur, this will require adding
-    # a variable that turns on or off 0 or 1 whether hop was
-    # attempted or not, in the gfsh function
-    
+function decohere_simple_collapse_on_attempted_hop(cnastate::Array{Int64,1},c::Array{Complex{Float64},1})
+    if cnastate[3]!=cnastate[1]
+        c[:]=zeros(nstates)
+        c[cnastate[3]]=1.0
+    end
+    nothing
 end
 
 function main()
@@ -293,7 +278,7 @@ function main()
     dc3=Array(Complex{Float64},nstates)
     dc4=Array(Complex{Float64},nstates)
     dmat=Array(Complex{Float64},(nstates,nstates))
-    cnstate=Array(Int64,2)
+    cnastate=Array(Int64,3)
     pbefore=Array(Float64,nstates)
     pafter=Array(Float64,nstates)
     deltap=Array(Float64,nstates)
@@ -305,77 +290,65 @@ function main()
     rd::Float64 = 0.0
     diabatp=Array(Float64,nstates)
     tsindex::Int64 = 1
-    product=Array(Float64,(nstates+1,tots))
+    #product=Array(Float64,(nstates+1,tots))
     timestep::Int64 = 0
+    recorded_timestep::Int64 = 0
     answer=Array(Float64,(nstates+1,anas))
 
     ### initialize trajectory ###
-    #xv[1]=mean_x+randn()*sigma_x
-    #xv[2]=(mean_p+randn()*sigma_p)/mass
-    xv[1]=mean_x # debugging only
-    xv[2]=mean_p # debugging only
-    
+    xv[1]=mean_x+randn()*sigma_x
+    xv[2]=(mean_p+randn()*sigma_p)/mass
     esys(xv[1],hsys,eval,evec)
     evecc[:,:]=evec
-    #cnstate[1]=searchsortedfirst(cumsum(abs2(evecc[1,:])),rand())
-    cnstate[1]=searchsortedfirst(cumsum(abs2(evecc[1,:])),0.5) # debugging only
-    
+    cnastate[1]=searchsortedfirst(cumsum(abs2(evecc[1,:])),rand())
     c[:]=evecc[1,:]
     dmat[:,:]=c*ctranspose(c)
     pbefore[:]=real(diag(dmat))
+    recorded_timestep = 1
 
     ### begin trajectory ###
     for timestep=1:tots
         ### classical dynamics ###
-        classical(xv,xvc,cnstate[1],hsys,eval,evec,fsys,f,dx,dv)
-        # for debugging only
-        #println(xv[1], " ", xv[2]) # debugging only
-        thermostat(xv,cnstate[1],hsys,eval,evec,fsys,f,r,z,t,hessian)
+        classical(xv,xvc,cnastate[1],hsys,eval,evec,fsys,f,dx,dv)
+        thermostat(xv,cnastate[1],hsys,eval,evec,fsys,f,r,z,t,hessian)
         evecn[:,:]=evec
         ### check norm of eigenvectors ###
         norm(evecc,evecn)
         evec[:,:]=evecn
         evecc[:,:]=evecn
         ### construct nacs and force moments ###
-        nac(d,nf,df,xv[1],cnstate[1],evec,eval,fsys,f)
+        nac(d,nf,df,xv[1],cnastate[1],evec,eval,fsys,f)
         ### construct phase space moments ###
         hd[:,:]=diagm(eval)
-        moments(xm,pm,xmc,pmc,xv[2],cnstate[1],d,hd,df,dmat,ddp1,ddp2,ddp3,ddp4,ddx1,ddx2,ddx3,ddx4)
-        println(timestep, " ", real(xm[1,2])) # debugging only
+        moments(xm,pm,xmc,pmc,xv[2],cnastate[1],d,hd,df,dmat,ddp1,ddp2,ddp3,ddp4,ddx1,ddx2,ddx3,ddx4)
         ### quantum dynamics ###
         h[:,:]=hd-1.0*im*xv[2]*d
         quantum(c,h,dc1,dc2,dc3,dc4)
         ### surface hopping ###
         dmat[:,:]=c*ctranspose(c)
         pafter[:]=real(diag(dmat))
-        #println(timestep, " ", sum(pafter)) # debugging only
-        #println(timestep, " ", c) # debugging only
-        if sum(pafter) < .98
-            exit()
-        end
         deltap[:]=pafter-pbefore
         deltap[isnan(deltap)]=0.0
-        #println(timestep, " ",deltap) # debugging only
-        gfsh(xv,cnstate,deltap,pafter[cnstate[1]],positives,hopping,index,eval,xm,pm)
-        # debugging only start
-        if cnstate[2]!=cnstate[1]
-            println(cnstate)
-            exit()
-        end
-        # debugging only end
+        gfsh(xv,cnastate,deltap,pafter[cnastate[1]],positives,hopping,index,eval,xm,pm)
         pbefore[:]=pafter
         ### decoherence ###
-        decohere(cnstate[1],c,pstates,rates,rd,nf,df,xm,pm)
+        decohere_augmented_algorithm(cnastate[1],c,pstates,rates,rd,nf,df,xm,pm)
         ### diabatic probabilities ###
-        diabatp[:]=abs2(evec)[:,cnstate[2]]
-        product[1,timestep]=timestep*dt
-        product[2:(nstates+1),timestep]=diabatp
+        diabatp[:]=abs2(evec)[:,cnastate[2]]
+	### record time and diabatic probabilities ###
+	if timestep in tsindices #1:anas
+	   answer[1,recorded_timestep]=timestep*dt
+	   answer[2,(nstates+1),recorded_timestep]=diabatp
+	   #product[1,recorded_timestep]=timestep*dt
+           #product[2:(nstates+1),recorded_timestep]=diabatp
+	   recorded_timestep += 1
         ### set current state ###
-        cnstate[1]=cnstate[2]
+        cnastate[1]=cnastate[2]
         nothing
     end
-    answer[:,:]=view(product,1:1:(nstates+1),tsindices)
-    #@printf "%.04f" te
+    ### print results ####
+    @printf "%.04f\n" the_parameter
+    #answer[:,:]=view(product,1:1:(nstates+1),tsindices)
     for i=1:anas
     	@printf "%.02f %.04f %.04f %.04f\n" answer[1,i] answer[2,i] answer[3,i] answer[4,i]
     end

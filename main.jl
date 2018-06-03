@@ -65,9 +65,7 @@ end
 
 function thermostat(xv::Array{Float64,1},cstate::Int64,hsys::Array{Float64,2},eval::Array{Float64,1},evec::Array{Float64,2},fsys::Array{Float64,2},f::Array{Float64,1},r::Array{Float64,1},z::Array{Float64,1},t::Array{Float64,1},hessian::Float64)
     ### incorporate bath ###
-    #r[:]=randn(4)*langevin_sigma
-    r[:] = [langevin_sigma,-langevin_sigma,langevin_sigma,-langevin_sigma] # debugging only
-    #r[:]=[0,0,0,0] # debugging only
+    r[:]=randn(4)*langevin_sigma
     z[1]=r[1]
     z[2]=dt*(r[1]/2.0+r[2]/(2.0*sqrt(3.0)))
     z[3]=dt^(2.0)*(r[1]/6.0+(sqrt(3.0)/12.0)*r[2]+r[3]/(12.0*sqrt(5.0)))
@@ -202,7 +200,7 @@ function gfsh(xv::Array{Float64,1},cnastate::Array{Int64,1},deltap::Array{Float6
     nothing
 end
 
-function decohere(cstate::Int64,c::Array{Complex{Float64},1},pstates::Array{Int64,1},rates::Array{Float64,1},rd::Float64,nf::Array{Float64,2},df::Array{Float64,2},xm::Array{Complex{Float64},2},pm::Array{Complex{Float64},2})
+function decohere_augmented_algorithm(cstate::Int64,c::Array{Complex{Float64},1},pstates::Array{Int64,1},rates::Array{Float64,1},rd::Float64,nf::Array{Float64,2},df::Array{Float64,2},xm::Array{Complex{Float64},2},pm::Array{Complex{Float64},2})
     pstates[:]=states[states.!=cstate]
     for pstate in pstates
         rates[1]=real(-(dt/2.0)*df[pstate,pstate]*xm[pstate,pstate])
@@ -291,9 +289,9 @@ function main()
     rates=Array(Float64,2)
     rd::Float64 = 0.0
     diabatp=Array(Float64,nstates)
-    tsindex::Int64 = 1
-    product=Array(Float64,(nstates+1,tots))
+    #product=Array(Float64,(nstates+1,tots))
     timestep::Int64 = 0
+    tsindex::Int64 = 1
     answer=Array(Float64,(nstates+1,anas))
 
     ### initialize trajectory ###
@@ -332,18 +330,23 @@ function main()
         gfsh(xv,cnastate,deltap,pafter[cnastate[1]],positives,hopping,index,eval,xm,pm)
         pbefore[:]=pafter
         ### decoherence ###
-        decohere(cnastate[1],c,pstates,rates,rd,nf,df,xm,pm)
+        decohere_augmented_algorithm(cnastate[1],c,pstates,rates,rd,nf,df,xm,pm)
         ### diabatic probabilities ###
         diabatp[:]=abs2(evec)[:,cnastate[2]]
-        product[1,timestep]=timestep*dt
-        product[2:(nstates+1),timestep]=diabatp
+	### record time and diabatic probabilities ###
+	if timestep in tsindices #1:anas
+	   answer[1,tsindex]=timestep*dt
+	   answer[2,(nstates+1),tsindex]=diabatp
+	   #product[1,tsindex]=timestep*dt
+           #product[2:(nstates+1),tsindex]=diabatp
+	   tsindex += 1
         ### set current state ###
         cnastate[1]=cnastate[2]
         nothing
     end
     ### print results ####
-    @printf "%.04f\n" df
-    answer[:,:]=view(product,1:1:(nstates+1),tsindices)
+    @printf "%.04f\n" the_parameter
+    #answer[:,:]=view(product,1:1:(nstates+1),tsindices)
     for i=1:anas
     	@printf "%.02f %.04f %.04f %.04f\n" answer[1,i] answer[2,i] answer[3,i] answer[4,i]
     end
