@@ -14,10 +14,10 @@ const states=range(1,nstates)
 const ifactor=1.000
 const mass=1.000
 const omega=4.375*10.0^(-5.0)
-#const df=2.400*10.0^(-2.0)
-const te=10.0*10.0^(-2.0)
-const re=2.390*10.0^(-2.0)
-const subotnik=sqrt(re*mass*omega^2.0/2.0)
+#const driving_force=2.400*10.0^(-2.0)
+const tunneling_energy=10.0*10.0^(-2.0)
+const reorganization=2.390*10.0^(-2.0)
+const subotnik=sqrt(reorganization*mass*omega^2.0/2.0)
 const is12=sqrt(2.500*10.0^(-6.0))
 const is23=ifactor*is12
 

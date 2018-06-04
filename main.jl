@@ -2,10 +2,13 @@
 
 include("constants.jl")
 
+driving_force = parse(Float64,ARGS[1])
+the_parameter = driving_force
+
 function esys(x::Float64,hsys::Array{Float64,2},eval::Array{Float64,1},evec::Array{Float64,2})
     hsys[1,1]=(0.5*mass*omega^(2.0))*x^(2.0)+subotnik*x
-    hsys[2,2]=(0.5*mass*omega^(2.0))*(x+df/(2.0*subotnik))^(2.0)+te
-    hsys[3,3]=(0.5*mass*omega^(2.0))*x^(2.0)-subotnik*x-df
+    hsys[2,2]=(0.5*mass*omega^(2.0))*(x+driving_force/(2.0*subotnik))^(2.0)+tunneling_energy
+    hsys[3,3]=(0.5*mass*omega^(2.0))*x^(2.0)-subotnik*x-driving_force
     hsys[1,2]=hsys[2,1]=is12
     hsys[1,3]=hsys[3,1]=0.00
     hsys[2,3]=hsys[3,2]=is23
@@ -18,7 +21,7 @@ end
 
 function force(x::Float64,fsys::Array{Float64,2},bra::Array{Float64,1},ket::Array{Float64,1},f::Array{Float64,1})
     fsys[1,1]=(mass*omega^(2.0))*x+subotnik
-    fsys[2,2]=(mass*omega^(2.0))*(x+df/2.0*subotnik)
+    fsys[2,2]=(mass*omega^(2.0))*(x+driving_force/2.0*subotnik)
     fsys[3,3]=(mass*omega^(2.0))*x-subotnik
     fsys[1,2]=fsys[2,1]=0.0
     fsys[1,3]=fsys[3,1]=0.0
@@ -289,7 +292,6 @@ function main()
     rates=Array(Float64,2)
     rd::Float64 = 0.0
     diabatp=Array(Float64,nstates)
-    #product=Array(Float64,(nstates+1,tots))
     timestep::Int64 = 0
     tsindex::Int64 = 1
     answer=Array(Float64,(nstates+1,anas))
@@ -318,7 +320,7 @@ function main()
         nac(d,nf,df,xv[1],cnastate[1],evec,eval,fsys,f)
         ### construct phase space moments ###
         hd[:,:]=diagm(eval)
-        moments(xm,pm,xmc,pmc,xv[2],cnastate[1],d,hd,df,dmat,ddp1,ddp2,ddp3,ddp4,ddx1,ddx2,ddx3,ddx4)
+        #moments(xm,pm,xmc,pmc,xv[2],cnastate[1],d,hd,df,dmat,ddp1,ddp2,ddp3,ddp4,ddx1,ddx2,ddx3,ddx4)
         ### quantum dynamics ###
         h[:,:]=hd-1.0*im*xv[2]*d
         quantum(c,h,dc1,dc2,dc3,dc4)
@@ -330,23 +332,21 @@ function main()
         gfsh(xv,cnastate,deltap,pafter[cnastate[1]],positives,hopping,index,eval,xm,pm)
         pbefore[:]=pafter
         ### decoherence ###
-        decohere_augmented_algorithm(cnastate[1],c,pstates,rates,rd,nf,df,xm,pm)
+        #decohere_augmented_algorithm(cnastate[1],c,pstates,rates,rd,nf,df,xm,pm)
         ### diabatic probabilities ###
         diabatp[:]=abs2(evec)[:,cnastate[2]]
 	### record time and diabatic probabilities ###
-	if timestep in tsindices #1:anas
-	   answer[1,tsindex]=timestep*dt
-	   answer[2,(nstates+1),tsindex]=diabatp
-	   #product[1,tsindex]=timestep*dt
-           #product[2:(nstates+1),tsindex]=diabatp
-	   tsindex += 1
+	    if timestep in tsindices #1:anas
+	        answer[1,tsindex]=timestep*dt
+            answer[2:(nstates+1),tsindex]=diabatp
+	        tsindex += 1
+        end
         ### set current state ###
         cnastate[1]=cnastate[2]
         nothing
     end
     ### print results ####
     @printf "%.04f\n" the_parameter
-    #answer[:,:]=view(product,1:1:(nstates+1),tsindices)
     for i=1:anas
     	@printf "%.02f %.04f %.04f %.04f\n" answer[1,i] answer[2,i] answer[3,i] answer[4,i]
     end
