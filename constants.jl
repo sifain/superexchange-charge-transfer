@@ -2,8 +2,8 @@
 
 ### timesteps ###
 const dt=1.25
-const tots=10^(7)
-const anas=10^(2)
+const tots=10^(6) # 7
+const anas=10^(2) # 2
 const tsindices=range(1,convert(Int,tots/anas),anas)
 
 ### states ###
@@ -14,7 +14,7 @@ const states=range(1,nstates)
 const ifactor=1.000
 const mass=1.000
 const omega=4.375*10.0^(-5.0)
-#const driving_force=2.400*10.0^(-2.0)
+const driving_force=2.400*10.0^(-2.0)
 const tunneling_energy=10.0*10.0^(-2.0)
 const reorganization=2.390*10.0^(-2.0)
 const subotnik=sqrt(reorganization*mass*omega^2.0/2.0)

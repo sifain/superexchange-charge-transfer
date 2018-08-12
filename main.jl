@@ -2,7 +2,7 @@
 
 include("constants.jl")
 
-driving_force = parse(Float64,ARGS[1])
+#driving_force = parse(Float64,ARGS[1])
 the_parameter = driving_force
 
 function esys(x::Float64,hsys::Array{Float64,2},eval::Array{Float64,1},evec::Array{Float64,2})
@@ -16,7 +16,7 @@ function esys(x::Float64,hsys::Array{Float64,2},eval::Array{Float64,1},evec::Arr
     index=sortperm(eval)
     eval[:]=eval[index]
     evec[:,:]=evec[:,index]
-    nothing    
+    nothing
 end
 
 function force(x::Float64,fsys::Array{Float64,2},bra::Array{Float64,1},ket::Array{Float64,1},f::Array{Float64,1})
@@ -182,7 +182,7 @@ function gfsh(xv::Array{Float64,1},cnastate::Array{Int64,1},deltap::Array{Float6
         positives[:]=deltap
         positives[positives.<0.0]=0.0
         hopping[:]=cumsum(-deltap[cnastate[1]]*positives/(pafter*sum(positives)))
-        hopping[isnan(hopping)]=0.0
+        hopping[isnan.(hopping)]=0.0
         index=searchsortedfirst(hopping,rand())
         if index==nstates+1
             cnastate[2]=cnastate[1]
@@ -243,65 +243,65 @@ end
 function main()
     
     ### allocate memory ###
-    xv=Array(Float64,2)
-    xvc=Array(Float64,2)
-    hsys=Array(Float64,(nstates,nstates))
-    eval=Array(Float64,nstates)
-    evec=Array(Float64,(nstates,nstates))
-    fsys=Array(Float64,(nstates,nstates))
-    f=Array(Float64,1)
-    dx=Array(Float64,4)
-    dv=Array(Float64,4)
-    r=Array(Float64,4)
-    z=Array(Float64,4)
-    t=Array(Float64,4)
+    xv=Array{Float64}(2)
+    xvc=Array{Float64}(2)
+    hsys=Array{Float64}((nstates,nstates))
+    eval=Array{Float64}(nstates)
+    evec=Array{Float64}((nstates,nstates))
+    fsys=Array{Float64}((nstates,nstates))
+    f=Array{Float64}(1)
+    dx=Array{Float64}(4)
+    dv=Array{Float64}(4)
+    r=Array{Float64}(4)
+    z=Array{Float64}(4)
+    t=Array{Float64}(4)
     hessian::Float64 = 0.0
-    evecc=Array(Float64,(nstates,nstates))
-    evecn=Array(Float64,(nstates,nstates))
-    d=Array(Float64,(nstates,nstates))
-    nf=Array(Float64,(nstates,nstates))
-    df=Array(Float64,(nstates,nstates))
-    xm=Array(Complex{Float64},(nstates,nstates))
-    pm=Array(Complex{Float64},(nstates,nstates))
-    xmc=Array(Complex{Float64},(nstates,nstates))
-    pmc=Array(Complex{Float64},(nstates,nstates))
-    hd=Array(Float64,(nstates,nstates))
-    ddx1=Array(Complex{Float64},(nstates,nstates))
-    ddx2=Array(Complex{Float64},(nstates,nstates))
-    ddx3=Array(Complex{Float64},(nstates,nstates))
-    ddx4=Array(Complex{Float64},(nstates,nstates))
-    ddp1=Array(Complex{Float64},(nstates,nstates))
-    ddp2=Array(Complex{Float64},(nstates,nstates))
-    ddp3=Array(Complex{Float64},(nstates,nstates))
-    ddp4=Array(Complex{Float64},(nstates,nstates))
-    h=Array(Complex{Float64},(nstates,nstates))
-    c=Array(Complex{Float64},nstates)
-    dc1=Array(Complex{Float64},nstates)
-    dc2=Array(Complex{Float64},nstates)
-    dc3=Array(Complex{Float64},nstates)
-    dc4=Array(Complex{Float64},nstates)
-    dmat=Array(Complex{Float64},(nstates,nstates))
-    cnastate=Array(Int64,3)
-    pbefore=Array(Float64,nstates)
-    pafter=Array(Float64,nstates)
-    deltap=Array(Float64,nstates)
-    positives=Array(Float64,nstates)
-    hopping=Array(Float64,nstates)
+    evecc=Array{Float64}((nstates,nstates))
+    evecn=Array{Float64}((nstates,nstates))
+    d=Array{Float64}((nstates,nstates))
+    nf=Array{Float64}((nstates,nstates))
+    df=Array{Float64}((nstates,nstates))
+    xm=Array{Complex{Float64}}((nstates,nstates))
+    pm=Array{Complex{Float64}}((nstates,nstates))
+    xmc=Array{Complex{Float64}}((nstates,nstates))
+    pmc=Array{Complex{Float64}}((nstates,nstates))
+    hd=Array{Float64}((nstates,nstates))
+    ddx1=Array{Complex{Float64}}((nstates,nstates))
+    ddx2=Array{Complex{Float64}}((nstates,nstates))
+    ddx3=Array{Complex{Float64}}((nstates,nstates))
+    ddx4=Array{Complex{Float64}}((nstates,nstates))
+    ddp1=Array{Complex{Float64}}((nstates,nstates))
+    ddp2=Array{Complex{Float64}}((nstates,nstates))
+    ddp3=Array{Complex{Float64}}((nstates,nstates))
+    ddp4=Array{Complex{Float64}}((nstates,nstates))
+    h=Array{Complex{Float64}}((nstates,nstates))
+    c=Array{Complex{Float64}}(nstates)
+    dc1=Array{Complex{Float64}}(nstates)
+    dc2=Array{Complex{Float64}}(nstates)
+    dc3=Array{Complex{Float64}}(nstates)
+    dc4=Array{Complex{Float64}}(nstates)
+    dmat=Array{Complex{Float64}}((nstates,nstates))
+    cnastate=Array{Int64}(3)
+    pbefore=Array{Float64}(nstates)
+    pafter=Array{Float64}(nstates)
+    deltap=Array{Float64}(nstates)
+    positives=Array{Float64}(nstates)
+    hopping=Array{Float64}(nstates)
     index::Int64 = 0
-    pstates=Array(Int64,nstates-1)
-    rates=Array(Float64,2)
+    pstates=Array{Int64}(nstates-1)
+    rates=Array{Float64}(2)
     rd::Float64 = 0.0
-    diabatp=Array(Float64,nstates)
+    diabatp=Array{Float64}(nstates)
     timestep::Int64 = 0
     tsindex::Int64 = 1
-    answer=Array(Float64,(nstates+1,anas))
+    answer=Array{Float64}((nstates+1,anas))
 
     ### initialize trajectory ###
     xv[1]=mean_x+randn()*sigma_x
     xv[2]=(mean_p+randn()*sigma_p)/mass
     esys(xv[1],hsys,eval,evec)
     evecc[:,:]=evec
-    cnastate[1]=searchsortedfirst(cumsum(abs2(evecc[1,:])),rand())
+    cnastate[1]=searchsortedfirst(cumsum(abs2.(evecc[1,:])),rand())
     c[:]=evecc[1,:]
     dmat[:,:]=c*ctranspose(c)
     pbefore[:]=real(diag(dmat))
@@ -320,7 +320,7 @@ function main()
         nac(d,nf,df,xv[1],cnastate[1],evec,eval,fsys,f)
         ### construct phase space moments ###
         hd[:,:]=diagm(eval)
-        #moments(xm,pm,xmc,pmc,xv[2],cnastate[1],d,hd,df,dmat,ddp1,ddp2,ddp3,ddp4,ddx1,ddx2,ddx3,ddx4)
+        moments(xm,pm,xmc,pmc,xv[2],cnastate[1],d,hd,df,dmat,ddp1,ddp2,ddp3,ddp4,ddx1,ddx2,ddx3,ddx4)
         ### quantum dynamics ###
         h[:,:]=hd-1.0*im*xv[2]*d
         quantum(c,h,dc1,dc2,dc3,dc4)
@@ -328,29 +328,35 @@ function main()
         dmat[:,:]=c*ctranspose(c)
         pafter[:]=real(diag(dmat))
         deltap[:]=pafter-pbefore
-        deltap[isnan(deltap)]=0.0
+        deltap[isnan.(deltap)]=0.0
         gfsh(xv,cnastate,deltap,pafter[cnastate[1]],positives,hopping,index,eval,xm,pm)
         pbefore[:]=pafter
         ### decoherence ###
-        #decohere_augmented_algorithm(cnastate[1],c,pstates,rates,rd,nf,df,xm,pm)
+        #decohere_simple_collapse_on_attempted_hop(cnastate,c)
+        #decohere_simple_collapse_on_successful_hop(cnastate,c)
+        #if cnastate[1] != cnastate[3]
+        #    println("Attempted State Switch")
+        #    println(cnastate)
+        #    println(c)
+        #end
+        decohere_augmented_algorithm(cnastate[1],c,pstates,rates,rd,nf,df,xm,pm)
         ### diabatic probabilities ###
-        diabatp[:]=abs2(evec)[:,cnastate[2]]
-	### record time and diabatic probabilities ###
-	    if timestep in tsindices #1:anas
-	        answer[1,tsindex]=timestep*dt
+        diabatp[:]=abs2.(evec)[:,cnastate[2]]
+        ### record time and diabatic probabilities ###
+        if timestep in tsindices
+            answer[1,tsindex]=timestep*dt
             answer[2:(nstates+1),tsindex]=diabatp
-	        tsindex += 1
+            tsindex += 1
         end
         ### set current state ###
         cnastate[1]=cnastate[2]
-        nothing
+    nothing
     end
     ### print results ####
     @printf "%.04f\n" the_parameter
     for i=1:anas
-    	@printf "%.02f %.04f %.04f %.04f\n" answer[1,i] answer[2,i] answer[3,i] answer[4,i]
+        @printf "%.02f %.04f %.04f %.04f\n" answer[1,i] answer[2,i] answer[3,i] answer[4,i]
     end
 end
 
 main()
-
