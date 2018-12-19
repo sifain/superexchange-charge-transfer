@@ -2,9 +2,10 @@
 
 ### timesteps ###
 const dt=1.25
-const tots=10^(6) # 7
+const tots=10^(7) # 7
 const anas=10^(2) # 2
 const tsindices=range(1,convert(Int,tots/anas),anas)
+const print_indices=range(1,convert(Int,tots/10^(4)),10^(4))
 
 ### states ###
 const nstates=3
@@ -20,6 +21,13 @@ const reorganization=2.390*10.0^(-2.0)
 const subotnik=sqrt(reorganization*mass*omega^2.0/2.0)
 const is12=sqrt(2.500*10.0^(-6.0))
 const is23=ifactor*is12
+
+### force type ###
+const ftype=1 # 1 = single surface, 2 = Ehrenfest force with decoherent force
+
+### truhlar decoherence parameters ###
+const e0_truhlar=0.1
+const c_truhlar=1.0 # changing from 10.0
 
 ### langevin parameters ###
 const temp=9.500*10.0^(-4.0)
